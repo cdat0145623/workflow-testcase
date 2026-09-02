@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createConfiguredRunService } from "@/features/workflows/runs/run-service-server";
 import { currentWorkflowDataMode } from "@/features/workflows/data/repository";
+import { runErrorPayload } from "@/features/workflows/runs/run-response";
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
       : await configured.service.startTestCaseRun({ testCaseId: String(body.testCaseId), graph: body.graph, variables: body.variables ?? {} });
     return NextResponse.json(result, { status: 202 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 });
+    const mapped = runErrorPayload(error);
+    return NextResponse.json(mapped.body, { status: mapped.status });
   } finally {
     await configured.close();
   }

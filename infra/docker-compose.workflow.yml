@@ -45,6 +45,8 @@ services:
       WORKFLOW_WORKER_URL: http://workflow-worker:8787
       DATABASE_URL: postgres://workflow:workflow@workflow-postgres:5432/workflow
       ARTIFACTS_ROOT: /artifacts
+      # Development-only fallback. Override from the host before deployment.
+      WORKFLOW_RUNTIME_SECRET_KEY: ${WORKFLOW_RUNTIME_SECRET_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
     ports:
       - "3000:3000"
     volumes:
@@ -132,6 +134,20 @@ services:
     volumes:
       - ../apps/workflow-web/tests/acceptance:/app/ui-tests:ro
       - ../output/playwright:/app/output
+    depends_on:
+      workflow-web:
+        condition: service_started
+
+  workflow-history-acceptance:
+    image: sendkit-workflow-worker:slim-v1
+    profiles: ["history-acceptance"]
+    working_dir: /app
+    command: node /app/ui-tests/run-runtime-history-acceptance.mjs
+    environment:
+      WEB_BASE_URL: http://workflow-web:3000
+      DATABASE_URL: postgres://workflow:workflow@workflow-postgres:5432/workflow
+    volumes:
+      - ../apps/workflow-web/tests/acceptance:/app/ui-tests:ro
     depends_on:
       workflow-web:
         condition: service_started

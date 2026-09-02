@@ -59,11 +59,13 @@ function EditorHarness() {
       <button type="button" onClick={() => editor.applyApprovedGraph({ ...initialGraph, nodes: [...initialGraph.nodes, { id: "approved", type: "step", position: { x: 240, y: 0 }, data: { type: "open-url", kind: "action", title: "Approved", values: { url: "{{baseUrl}}" } } }], edges: [{ id: "approved-edge", source: "start", target: "approved" }] })}>
         Apply Approved
       </button>
+      <button type="button" onClick={() => editor.restoreVersionGraph({ ...initialGraph, nodes: [...initialGraph.nodes, { id: "restored", type: "step", position: { x: 240, y: 0 }, data: { type: "open-url", kind: "action", title: "Restored", values: { url: "{{baseUrl}}" } } }], edges: [{ id: "restored-edge", source: "start", target: "restored" }] }, 1)}>Restore v1</button>
       <output data-testid="selected">{selected?.data.type ?? "none"}</output>
       <output data-testid="url">{selected?.data.values.url ?? ""}</output>
       <output data-testid="edges">{editor.graph.edges.length}</output>
       <output data-testid="problems">{editor.problems.length}</output>
       <output data-testid="dirty">{String(editor.isDirty)}</output>
+      <output data-testid="restored-from">{editor.restoredFromVersion ?? "none"}</output>
     </div>
   );
 }
@@ -118,5 +120,13 @@ describe("WorkflowEditorProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply Approved" }));
     expect(screen.getByTestId("edges").textContent).toBe("1");
     expect(screen.getByTestId("dirty").textContent).toBe("false");
+  });
+
+  test("restores a version only into a dirty draft until Save", () => {
+    render(<WorkflowEditorProvider initialGraph={initialGraph} onSave={async () => undefined}><EditorHarness /></WorkflowEditorProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Restore v1" }));
+    expect(screen.getByTestId("edges").textContent).toBe("1");
+    expect(screen.getByTestId("dirty").textContent).toBe("true");
+    expect(screen.getByTestId("restored-from").textContent).toBe("1");
   });
 });

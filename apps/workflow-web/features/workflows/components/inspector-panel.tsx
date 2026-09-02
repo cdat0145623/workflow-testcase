@@ -3,17 +3,35 @@
 import { RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useWorkflowRuns } from "../runs/workflow-runs-provider";
 import { ArtifactViewer } from "./artifact-viewer";
 import type { ConsoleSelection } from "./logs-panel";
 import { RunVariablesDialog } from "./run-variables-dialog";
+import type { WorkflowVersionDetail } from "../versions/types";
+import { extractRuntimeFields } from "../runtime-values/field-registry";
+import { useRuntimeValues } from "../runtime-values/use-runtime-values";
 
 export function InspectorPanel({ selection }: { selection: ConsoleSelection }) {
   const runs = useWorkflowRuns();
   const [replayVariablesOpen, setReplayVariablesOpen] = useState(false);
+  const [version, setVersion] = useState<WorkflowVersionDetail | null>(null);
   const run = runs.latestRun;
+  const runtime = useRuntimeValues(runs.testCaseId, replayVariablesOpen, run?.workflowVersionId);
+  useEffect(() => {
+    if (!replayVariablesOpen || !run) return;
+    let disposed = false;
+    void fetch(`/api/workflow-versions/${encodeURIComponent(run.workflowVersionId)}`)
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "Workflow version not found");
+        return body as WorkflowVersionDetail;
+      })
+      .then((detail) => { if (!disposed) setVersion(detail); })
+      .catch(() => { if (!disposed) setVersion(null); });
+    return () => { disposed = true; };
+  }, [replayVariablesOpen, run]);
   if (!run || run.id !== selection.runId) return null;
   if (selection.kind === "run") {
     return (
@@ -34,7 +52,11 @@ export function InspectorPanel({ selection }: { selection: ConsoleSelection }) {
         <RunVariablesDialog
           open={replayVariablesOpen}
           onOpenChange={setReplayVariablesOpen}
-          onRun={(variables) => void runs.replay(run.workflowVersionId, variables).catch(() => undefined)}
+          fields={version ? extractRuntimeFields(version.graph) : []}
+          initialValues={runtime.values}
+          isLoading={runtime.isLoading}
+          loadError={runtime.error}
+          onRun={(variables) => runs.replay(run.workflowVersionId, variables)}
         />
       </div>
     );

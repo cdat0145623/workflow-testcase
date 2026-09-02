@@ -28,6 +28,7 @@ export interface WorkflowEditorContextValue {
   isDirty: boolean;
   isSaving: boolean;
   saveError: string | null;
+  restoredFromVersion: number | null;
   addNode(type: NodeType, position: { x: number; y: number }): string | undefined;
   selectNode(nodeId: string | null): void;
   updateNodeValues(nodeId: string, values: Record<string, string>): void;
@@ -38,6 +39,7 @@ export interface WorkflowEditorContextValue {
   deleteElements(nodeIds: string[], edgeIds: string[]): void;
   getGraph(): WorkflowGraph;
   applyApprovedGraph(graph: WorkflowGraph): void;
+  restoreVersionGraph(graph: WorkflowGraph, versionNumber: number): void;
   save(): Promise<boolean>;
 }
 
@@ -59,11 +61,13 @@ export function WorkflowEditorProvider({ children, initialGraph, onSave }: Workf
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [restoredFromVersion, setRestoredFromVersion] = useState<number | null>(null);
 
   const updateGraph = useCallback((updater: (current: WorkflowGraph) => WorkflowGraph) => {
     setGraph((current) => updater(current));
     setIsDirty(true);
     setSaveError(null);
+    setRestoredFromVersion(null);
   }, []);
 
   const addNode = useCallback(
@@ -170,6 +174,15 @@ export function WorkflowEditorProvider({ children, initialGraph, onSave }: Workf
     setSelectedNodeId(null);
     setIsDirty(false);
     setSaveError(null);
+    setRestoredFromVersion(null);
+  }, []);
+  const restoreVersionGraph = useCallback((restoredGraph: WorkflowGraph, versionNumber: number) => {
+    if (validateGraph(restoredGraph).length > 0) return;
+    setGraph(restoredGraph);
+    setSelectedNodeId(null);
+    setIsDirty(true);
+    setSaveError(null);
+    setRestoredFromVersion(versionNumber);
   }, []);
   const save = useCallback(async () => {
     if (validateGraph(graph).length > 0) return false;
@@ -178,6 +191,7 @@ export function WorkflowEditorProvider({ children, initialGraph, onSave }: Workf
     try {
       await onSave(graph);
       setIsDirty(false);
+      setRestoredFromVersion(null);
       return true;
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Unable to save workflow");
@@ -195,6 +209,7 @@ export function WorkflowEditorProvider({ children, initialGraph, onSave }: Workf
       isDirty,
       isSaving,
       saveError,
+      restoredFromVersion,
       addNode,
       selectNode: setSelectedNodeId,
       updateNodeValues,
@@ -207,11 +222,13 @@ export function WorkflowEditorProvider({ children, initialGraph, onSave }: Workf
       deleteElements,
       getGraph,
       applyApprovedGraph,
+      restoreVersionGraph,
       save,
     }),
     [
       addNode,
       applyApprovedGraph,
+      restoreVersionGraph,
       connect,
       deleteElements,
       getGraph,
@@ -223,6 +240,7 @@ export function WorkflowEditorProvider({ children, initialGraph, onSave }: Workf
       problems,
       save,
       saveError,
+      restoredFromVersion,
       selectedNodeId,
       updateNodeValues,
     ],

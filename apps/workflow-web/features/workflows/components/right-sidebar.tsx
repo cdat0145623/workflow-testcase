@@ -13,6 +13,8 @@ import { useWorkflowRuns } from "../runs/workflow-runs-provider";
 import { NodeIcon } from "./node-icon";
 import { RunVariablesDialog } from "./run-variables-dialog";
 import { useWorkflowEditor } from "./workflow-editor-provider";
+import { extractRuntimeFields } from "../runtime-values/field-registry";
+import { useRuntimeValues } from "../runtime-values/use-runtime-values";
 
 const definitions = Object.values(nodeRegistry);
 
@@ -170,6 +172,7 @@ export function RightSidebar() {
   const runs = useWorkflowRuns();
   const [tab, setTab] = useState<"toolbar" | "editor">("toolbar");
   const [runVariablesOpen, setRunVariablesOpen] = useState(false);
+  const runtime = useRuntimeValues(runs.testCaseId, runVariablesOpen);
   const selected = editor.graph.nodes.find((node) => node.id === editor.selectedNodeId);
 
   useEffect(() => {
@@ -228,12 +231,17 @@ export function RightSidebar() {
       </div>
 
       {editor.saveError && <p role="alert" className="border-b border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-200">{editor.saveError}</p>}
+      {editor.restoredFromVersion != null && <p className="border-b border-amber-900/70 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">Restored v{editor.restoredFromVersion} is a draft. Save it explicitly; the immutable version is unchanged.</p>}
       {runs.error && <p role="alert" className="border-b border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-200">{runs.error}</p>}
       {tab === "toolbar" ? <Palette /> : <Inspector node={selected} />}
       <RunVariablesDialog
         open={runVariablesOpen}
         onOpenChange={setRunVariablesOpen}
-        onRun={(variables) => void runs.run(editor.getGraph(), variables).catch(() => undefined)}
+        fields={runtime.fields.length > 0 ? runtime.fields : extractRuntimeFields(editor.graph)}
+        initialValues={runtime.values}
+        isLoading={runtime.isLoading}
+        loadError={runtime.error}
+        onRun={(variables) => runs.run(editor.getGraph(), variables)}
       />
     </aside>
   );

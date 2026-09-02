@@ -50,6 +50,15 @@ export const testCases = pgTable(
   (table) => [uniqueIndex("test_cases_feature_slug_unique").on(table.featureId, table.slug)],
 );
 
+export const testCaseRuntimeValues = pgTable("test_case_runtime_values", {
+  testCaseId: uuid("test_case_id").primaryKey().references(() => testCases.id, { onDelete: "cascade" }),
+  username: text("username").notNull(),
+  passwordCiphertext: text("password_ciphertext").notNull(),
+  taskTitle: text("task_title").notNull(),
+  assigneeName: text("assignee_name").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const authoringSessions = pgTable("authoring_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   testCaseId: uuid("test_case_id").notNull().references(() => testCases.id, { onDelete: "cascade" }),

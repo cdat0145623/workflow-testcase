@@ -21,14 +21,25 @@ const fixtureServer = createServer((request, response) => {
 });
 
 async function createProject(page, name) {
-  await page.getByRole("button", { name: "+ New project" }).click();
-  await page.waitForTimeout(250);
-  const dialogStates = await page.locator("dialog").evaluateAll((dialogs) => dialogs.map((dialog) => ({ open: dialog.open, text: dialog.textContent?.slice(0, 80) })));
-  if (!dialogStates.some((dialog) => dialog.open)) throw new Error(`Project dialog did not open: ${JSON.stringify(dialogStates)}`);
-  const dialog = page.locator("dialog[open]");
-  await dialog.getByLabel("Project name").fill(name);
-  await dialog.getByRole("button", { name: "Create" }).click();
-  await page.getByText(name, { exact: true }).waitFor();
+  const createDialog = page.locator("dialog[open]").filter({ hasText: "Create project" });
+
+  // Next dev can replace the sidebar once while its Fast Refresh client settles.
+  // Retry only when no dialog was opened; no project has been persisted at that point.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await page.getByRole("button", { name: "+ New project" }).waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "+ New project" }).click();
+    try {
+      await createDialog.waitFor({ state: "visible", timeout: 5_000 });
+      await createDialog.getByLabel("Project name").fill(name);
+      await createDialog.getByRole("button", { name: "Create" }).click();
+      await page.getByText(name, { exact: true }).waitFor();
+      return;
+    } catch (error) {
+      if (attempt === 3) throw error;
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+    }
+  }
 }
 
 async function createFeature(page, projectName, featureName) {
@@ -56,6 +67,11 @@ async function waitForNewRun(page, previousRunLabel) {
     const label = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("run-"))?.textContent ?? "";
     return label && label !== previous;
   }, previousRunLabel);
+}
+
+async function submitRunDialog(page) {
+  const dialog = page.locator("dialog[open]").filter({ hasText: "Run workflow" });
+  await dialog.getByRole("button", { name: "Run workflow", exact: true }).click();
 }
 
 async function waitForWeb() {
@@ -101,6 +117,7 @@ try {
   await connectInitialNodes(page);
   await page.getByRole("button", { name: "Run", exact: true }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Run", exact: true }).click();
+  await submitRunDialog(page);
   await page.getByText("passed", { exact: true }).waitFor({ timeout: 20_000 });
   const firstRunRow = page.locator("button").filter({ hasText: "run-" }).first();
   const firstRunLabel = await firstRunRow.textContent();
@@ -115,6 +132,7 @@ try {
 
   await firstRunRow.click();
   await page.getByRole("button", { name: "Run again", exact: true }).click();
+  await submitRunDialog(page);
   await waitForNewRun(page, firstRunLabel);
   await page.getByText("passed", { exact: true }).waitFor({ timeout: 20_000 });
   const replayVersions = await pool.query(
@@ -132,6 +150,7 @@ try {
     [projectA],
   )).rows[0].count);
   await page.getByRole("button", { name: "Run", exact: true }).click();
+  await submitRunDialog(page);
   await page.getByText("running", { exact: true }).waitFor({ timeout: 20_000 });
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await page.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });

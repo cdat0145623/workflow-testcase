@@ -8,12 +8,15 @@ import type { WorkerRun } from "./types";
 const terminalStatuses = new Set(["passed", "failed", "cancelled"]);
 
 interface RunsContextValue {
+  testCaseId: string;
   activeRun: WorkerRun | null;
   latestRun: WorkerRun | null;
   error: string | null;
+  historyRevision: number;
   run(graph: WorkflowGraph, variables?: Record<string, string>): Promise<void>;
   cancel(): Promise<void>;
   replay(workflowVersionId: string, variables?: Record<string, string>): Promise<void>;
+  openRun(runId: string): Promise<void>;
 }
 
 const RunsContext = createContext<RunsContextValue | null>(null);
@@ -21,7 +24,10 @@ const RunsContext = createContext<RunsContextValue | null>(null);
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { "content-type": "application/json", ...init?.headers } });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = Object.assign(new Error(body.error ?? `Request failed (${response.status})`), { fieldErrors: body.fieldErrors });
+    throw error;
+  }
   return body;
 }
 
@@ -29,6 +35,7 @@ export function WorkflowRunsProvider({ testCaseId, pollIntervalMs = 1_000, initi
   const [runId, setRunId] = useState<string | null>(null);
   const [latestRun, setLatestRun] = useState<WorkerRun | null>(initialRun);
   const [error, setError] = useState<string | null>(null);
+  const [historyRevision, setHistoryRevision] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRunIdsRef = useRef(new Set<string>());
 
@@ -40,7 +47,7 @@ export function WorkflowRunsProvider({ testCaseId, pollIntervalMs = 1_000, initi
         const run = await jsonRequest<WorkerRun>(`/api/runs/${encodeURIComponent(runId)}`);
         if (disposed || cancelledRunIdsRef.current.has(runId)) return;
         setLatestRun(run);
-        if (terminalStatuses.has(run.status)) setRunId(null);
+        if (terminalStatuses.has(run.status)) { setRunId(null); setHistoryRevision((current) => current + 1); }
         else timerRef.current = setTimeout(poll, pollIntervalMs);
       } catch (pollError) {
         if (!disposed) {
@@ -56,15 +63,16 @@ export function WorkflowRunsProvider({ testCaseId, pollIntervalMs = 1_000, initi
     };
   }, [pollIntervalMs, runId]);
 
-  const queue = useCallback(async (body: unknown) => {
+  const queue = useCallback(async (body: unknown, url = "/api/runs") => {
     setError(null);
     try {
-      const queued = await jsonRequest<{ runId: string; status: "queued"; workflowVersionId: string }>("/api/runs", {
+      const queued = await jsonRequest<{ runId: string; status: "queued"; workflowVersionId: string }>(url, {
         method: "POST",
         body: JSON.stringify(body),
       });
       setLatestRun({ id: queued.runId, workflowVersionId: queued.workflowVersionId, status: "queued", createdAt: new Date().toISOString(), steps: [] });
       setRunId(queued.runId);
+      setHistoryRevision((current) => current + 1);
     } catch (queueError) {
       setError(queueError instanceof Error ? queueError.message : String(queueError));
       throw queueError;
@@ -72,11 +80,24 @@ export function WorkflowRunsProvider({ testCaseId, pollIntervalMs = 1_000, initi
   }, []);
 
   const value = useMemo<RunsContextValue>(() => ({
+    testCaseId,
     activeRun: runId && latestRun ? latestRun : null,
     latestRun,
     error,
+    historyRevision,
     run: (graph, variables = {}) => queue({ action: "start", testCaseId, graph, variables }),
-    replay: (workflowVersionId, variables = {}) => queue({ action: "replay", workflowVersionId, variables }),
+    replay: (workflowVersionId, variables = {}) => queue({ variables }, `/api/workflow-versions/${encodeURIComponent(workflowVersionId)}/runs`),
+    openRun: async (savedRunId) => {
+      setError(null);
+      try {
+        const run = await jsonRequest<WorkerRun>(`/api/runs/${encodeURIComponent(savedRunId)}`);
+        setLatestRun(run);
+        setRunId(null);
+      } catch (openError) {
+        setError(openError instanceof Error ? openError.message : String(openError));
+        throw openError;
+      }
+    },
     cancel: async () => {
       if (!runId) return;
       try {
@@ -97,7 +118,7 @@ export function WorkflowRunsProvider({ testCaseId, pollIntervalMs = 1_000, initi
         throw cancelError;
       }
     },
-  }), [error, latestRun, queue, runId, testCaseId]);
+  }), [error, historyRevision, latestRun, queue, runId, testCaseId]);
 
   return <RunsContext.Provider value={value}>{children}</RunsContext.Provider>;
 }
