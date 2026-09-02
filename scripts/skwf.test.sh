@@ -28,6 +28,9 @@ grep -F -- "--profile web --profile ui-acceptance up --no-build --abort-on-conta
 (cd "$test_root/elsewhere" && "$repo_root/scripts/skwf" worker-acceptance >/dev/null)
 grep -F -- "--profile acceptance up --no-build --abort-on-container-exit --exit-code-from workflow-acceptance workflow-postgres workflow-worker workflow-acceptance" "$SKWF_DOCKER_LOG" >/dev/null
 
+(cd "$test_root/elsewhere" && "$repo_root/scripts/skwf" history-acceptance >/dev/null)
+grep -F -- "--profile web --profile history-acceptance up --no-build --abort-on-container-exit --exit-code-from workflow-history-acceptance workflow-postgres workflow-worker workflow-web workflow-history-acceptance" "$SKWF_DOCKER_LOG" >/dev/null
+
 if (cd "$test_root/elsewhere" && "$repo_root/scripts/skwf" unknown >/dev/null 2>&1); then
   echo "unknown command unexpectedly succeeded" >&2
   exit 1

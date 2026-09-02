@@ -12,7 +12,7 @@ compose_file=$repo_root/infra/docker-compose.workflow.yml
 compose=(docker compose -p sendkit-workflow -f "$compose_file")
 
 usage() {
-  printf 'Usage: skwf {dev|test|authoring-test|authoring-acceptance|acceptance|worker-acceptance|status|stop}\n' >&2
+  printf 'Usage: skwf {dev|test|authoring-test|authoring-acceptance|acceptance|history-acceptance|worker-acceptance|status|stop}\n' >&2
 }
 
 stop_stack() {
@@ -44,6 +44,11 @@ case "${1:-}" in
     trap stop_stack EXIT INT TERM
     cd "$repo_root"
     "${compose[@]}" --profile web --profile ui-acceptance up --no-build --abort-on-container-exit --exit-code-from workflow-ui-acceptance workflow-postgres workflow-worker workflow-web workflow-ui-acceptance
+    ;;
+  history-acceptance)
+    trap stop_stack EXIT INT TERM
+    cd "$repo_root"
+    "${compose[@]}" --profile web --profile history-acceptance up --no-build --abort-on-container-exit --exit-code-from workflow-history-acceptance workflow-postgres workflow-worker workflow-web workflow-history-acceptance
     ;;
   worker-acceptance)
     trap stop_stack EXIT INT TERM

@@ -18,6 +18,8 @@ function Harness() {
     <div>
       <button type="button" onClick={() => void runs.run(graph)}>Run</button>
       <button type="button" onClick={() => void runs.cancel()}>Cancel</button>
+      <button type="button" onClick={() => void runs.replay("version-9")}>Replay</button>
+      <button type="button" onClick={() => void runs.openRun("saved-run")}>Open saved</button>
       <output>{runs.latestRun?.status ?? "idle"}</output>
       <output data-testid="step-count">{runs.latestRun?.steps.length ?? 0}</output>
     </div>
@@ -100,4 +102,27 @@ test("preserves known steps when the cancel response omits them", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   await screen.findByText("cancelled");
   expect(screen.getByTestId("step-count").textContent).toBe("1");
+});
+
+test("loads a persisted run into the existing console without polling it again", async () => {
+  globalThis.fetch = (async (input) => {
+    expect(String(input)).toBe("/api/runs/saved-run");
+    return Response.json({ id: "saved-run", workflowVersionId: "version-4", status: "failed", createdAt: new Date().toISOString(), steps: [] });
+  }) as typeof fetch;
+  render(<WorkflowRunsProvider testCaseId="case-1"><Harness /></WorkflowRunsProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "Open saved" }));
+  expect(await screen.findByText("failed")).toBeTruthy();
+});
+
+test("replays an immutable version through its version-scoped endpoint", async () => {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input) => {
+    calls.push(String(input));
+    if (String(input).includes("/workflow-versions/")) return Response.json({ runId: "replay-run", status: "queued", workflowVersionId: "version-9" }, { status: 202 });
+    return Response.json({ id: "replay-run", workflowVersionId: "version-9", status: "passed", createdAt: new Date().toISOString(), steps: [] });
+  }) as typeof fetch;
+  render(<WorkflowRunsProvider testCaseId="case-1" pollIntervalMs={5}><Harness /></WorkflowRunsProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "Replay" }));
+  await screen.findByText("passed");
+  expect(calls[0]).toBe("/api/workflow-versions/version-9/runs");
 });

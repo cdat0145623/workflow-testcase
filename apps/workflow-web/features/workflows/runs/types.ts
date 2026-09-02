@@ -16,6 +16,18 @@ export interface WorkerRun {
   steps: StepResult[];
 }
 
+export interface RunHistoryEntry {
+  id: string;
+  workflowVersionId: string;
+  versionNumber: number;
+  status: RunStatus;
+  error?: string;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  failedStep?: { stepId: string; title: string; error: string };
+}
+
 export interface StartWorkerRunInput {
   baseUrl: string;
   variables: Record<string, string>;

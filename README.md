@@ -118,6 +118,7 @@ skwf test         # web tests and typecheck in Docker
 skwf authoring-test # authoring contract, source-boundary and compiler tests
 skwf authoring-acceptance # source-first authoring, immutable approval, two local replays
 skwf acceptance   # full UI-to-worker Playwright acceptance
+skwf history-acceptance # encrypted runtime preset, immutable version and persisted-history acceptance
 skwf worker-acceptance # deterministic worker-only acceptance
 skwf status       # container and health summary
 skwf stop         # stop services; preserve PostgreSQL and artifacts
@@ -136,7 +137,18 @@ Run either acceptance profile from any terminal. Both are ephemeral and create n
 ```bash
 ./scripts/skwf acceptance
 ./scripts/skwf worker-acceptance
+./scripts/skwf history-acceptance
 ```
+
+### Runtime presets, versions and run history
+
+Each test case owns exactly one current runtime preset. The Run dialog only displays variables referenced by that workflow graph. A successful Run overwrites that preset, saves the editable graph, creates the next immutable version, then dispatches the deterministic worker.
+
+`password` is encrypted with AES-256-GCM in PostgreSQL using `WORKFLOW_RUNTIME_SECRET_KEY`; username, task title and assignee remain readable for this internal local tool. Set a private 32-byte base64 key before starting the web service (for example `openssl rand -base64 32`). The development Compose fallback is deliberately not suitable for deployment.
+
+The header has four modes: **Workflow**, **Authoring**, **Versions** and **Runs**. Versions is newest-first. View opens a read-only graph; Run exact version reuses the current preset without creating another version; Restore copies that graph into an unsaved draft. A restore never mutates the historical version. Click Save explicitly to retain the draft; the next normal Run then produces the next version number.
+
+Runs is PostgreSQL-backed, so previous runs, steps and artifacts remain available after a browser reload. Password display in the internal Run dialog is intentionally clear-text for this local-only phase. Do not expose this UI publicly until authentication and authorization are implemented.
 
 ### Agent authoring flow
 
