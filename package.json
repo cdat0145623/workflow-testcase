@@ -1,0 +1,36 @@
+{
+  "name": "sendkit-workspace",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "format": "oxfmt . --write",
+    "format:check": "oxfmt . --check",
+    "lint": "oxlint . --deny-warnings",
+    "lint:fix": "oxlint . --fix",
+    "build:core": "bun run --filter @cwa-dev/sendkit-core build",
+    "build:cli": "bun run --filter @cwa-dev/sendkit build",
+    "build:local-mcp": "bun run --filter @cwa-dev/sendkit-mcp build",
+    "build:workflow-contract": "bun run --filter @cwa-dev/sendkit-workflow-contract build",
+    "build:workflow-worker": "bun run --filter @cwa-dev/sendkit-workflow-worker build",
+    "dev:cli": "bun run packages/cli/src/index.ts",
+    "dev:local-mcp": "bun run packages/local-mcp/src/index.ts",
+    "dev:remote-mcp": "bun run apps/remote-mcp/src/index.ts",
+    "test:workflow-contract": "bun run --filter @cwa-dev/sendkit-workflow-contract test",
+    "test:workflow-worker": "bun run --filter @cwa-dev/sendkit-workflow-worker test",
+    "release:pack:core": "bun run --filter @cwa-dev/sendkit-core pack:dry",
+    "release:pack:cli": "bun run --filter @cwa-dev/sendkit pack:dry",
+    "release:pack:local-mcp": "bun run --filter @cwa-dev/sendkit-mcp pack:dry",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "oxfmt": "^0.53.0",
+    "oxlint": "^1.68.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3"
+  }
+}
