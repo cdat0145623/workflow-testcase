@@ -1,0 +1,39 @@
+{
+  "name": "@cwa-dev/sendkit-workflow-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --webpack --hostname 0.0.0.0 --port 3000",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0 --port 3000",
+    "test": "bun test tests features app",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cwa-dev/sendkit-workflow-contract": "workspace:*",
+    "@xyflow/react": "12.11.2",
+    "clsx": "2.1.1",
+    "drizzle-orm": "0.45.2",
+    "lucide-react": "1.23.0",
+    "next": "16.2.6",
+    "pg": "8.16.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-resizable-panels": "4.12.1",
+    "tailwind-merge": "3.6.0"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.0.10",
+    "@tailwindcss/postcss": "4.1.14",
+    "@testing-library/react": "16.3.0",
+    "@types/bun": "1.2.22",
+    "@types/node": "25.0.3",
+    "@types/pg": "8.15.5",
+    "@types/react": "19.2.3",
+    "@types/react-dom": "19.2.3",
+    "happy-dom": "20.0.10",
+    "tailwindcss": "4.1.14",
+    "typescript": "6.0.3"
+  }
+}
