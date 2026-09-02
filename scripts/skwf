@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source_path=${BASH_SOURCE[0]}
+while [[ -L "$source_path" ]]; do
+  source_dir=$(cd -P "$(dirname "$source_path")" && pwd)
+  target=$(readlink "$source_path")
+  [[ "$target" = /* ]] && source_path=$target || source_path=$source_dir/$target
+done
+repo_root=$(cd -P "$(dirname "$source_path")/.." && pwd)
+compose_file=$repo_root/infra/docker-compose.workflow.yml
+compose=(docker compose -p sendkit-workflow -f "$compose_file")
+
+usage() {
+  printf 'Usage: skwf {dev|test|authoring-test|authoring-acceptance|acceptance|worker-acceptance|status|stop}\n' >&2
+}
+
+stop_stack() {
+  "${compose[@]}" stop workflow-web workflow-worker workflow-postgres
+}
+
+case "${1:-}" in
+  dev)
+    trap stop_stack EXIT INT TERM
+    cd "$repo_root"
+    "${compose[@]}" --profile web up --no-build workflow-postgres workflow-worker workflow-web
+    ;;
+  test)
+    cd "$repo_root"
+    "${compose[@]}" --profile web run --rm workflow-web sh -c \
+      "bun run --filter @cwa-dev/sendkit-workflow-contract build && bun run --filter @cwa-dev/sendkit-workflow-web test && bun run --filter @cwa-dev/sendkit-workflow-web typecheck"
+    ;;
+  authoring-test)
+    cd "$repo_root"
+    "${compose[@]}" --profile web run --rm workflow-web sh -c \
+      "bun run --filter @cwa-dev/sendkit-workflow-contract build && bun run --filter @cwa-dev/sendkit-workflow-web test -- features/authoring && bun test packages/local-mcp/tests"
+    ;;
+  authoring-acceptance)
+    trap stop_stack EXIT INT TERM
+    cd "$repo_root"
+    "${compose[@]}" --profile web --profile authoring-acceptance up --no-build --abort-on-container-exit --exit-code-from workflow-authoring-acceptance workflow-postgres workflow-worker workflow-web workflow-authoring-acceptance
+    ;;
+  acceptance)
+    trap stop_stack EXIT INT TERM
+    cd "$repo_root"
+    "${compose[@]}" --profile web --profile ui-acceptance up --no-build --abort-on-container-exit --exit-code-from workflow-ui-acceptance workflow-postgres workflow-worker workflow-web workflow-ui-acceptance
+    ;;
+  worker-acceptance)
+    trap stop_stack EXIT INT TERM
+    cd "$repo_root"
+    "${compose[@]}" --profile acceptance up --no-build --abort-on-container-exit --exit-code-from workflow-acceptance workflow-postgres workflow-worker workflow-acceptance
+    ;;
+  status)
+    "${compose[@]}" --profile web ps
+    if command -v curl >/dev/null 2>&1; then
+      curl --fail --silent --show-error http://127.0.0.1:8787/health 2>/dev/null || true
+      printf '\n'
+      curl --fail --silent --show-error --location http://127.0.0.1:3000/ >/dev/null 2>&1 || true
+    fi
+    ;;
+  stop)
+    stop_stack
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

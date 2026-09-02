@@ -39,6 +39,7 @@ sendkit telegram "<chat-id>" "Hello from SendKit"
 - [What Is SendKit?](#what-is-sendkit)
 - [Who This README Is For](#who-this-readme-is-for)
 - [What Is Included](#what-is-included)
+- [Local Workflow Worker](#local-workflow-worker)
 - [Prerequisites](#prerequisites)
 - [Use SendKit](#use-sendkit)
 - [Fork Or Adapt SendKit](#fork-or-adapt-sendkit)
@@ -92,7 +93,61 @@ Start with the section that matches your goal:
 | `packages/cli` | Human/script CLI adapter. |
 | `packages/local-mcp` | Local MCP stdio server adapter for AI clients. |
 | `apps/remote-mcp` | Remote MCP HTTP adapter for deployed clients. |
+| `apps/workflow-worker` | Deterministic local Playwright workflow runner, with PostgreSQL run state and artifacts. |
 | `skills/sendkit` | Agent-facing usage instructions. |
+
+## Local Workflow Worker
+
+SendKit is the only source of truth for the workflow contract and Playwright worker. The earlier `browser-automation-app` project is reference-only; changes are not synchronized back to it.
+
+The local runner is intentionally deterministic: it replays a saved workflow and does not call an LLM, Agent, Stagehand, Browserbase, or a remote service. It stores run state in the project-local PostgreSQL container and writes screenshots, traces, logs, and reports under `.local-data/artifacts`.
+
+### Workflow UI launcher
+
+The workflow UI uses Docker-only dependencies and hot reloads web source without rebuilding the stable Playwright worker image. To make its launcher available from any folder, run this once from the SendKit repository:
+
+```bash
+./scripts/install-skwf
+```
+
+The installer only creates `~/.local/bin/skwf`; it does not edit shell configuration. It prints the exact PATH line when `~/.local/bin` is not already available.
+
+```bash
+skwf dev          # foreground PostgreSQL + worker + web; Ctrl-C stops them
+skwf test         # web tests and typecheck in Docker
+skwf authoring-test # authoring contract, source-boundary and compiler tests
+skwf authoring-acceptance # source-first authoring, immutable approval, two local replays
+skwf acceptance   # full UI-to-worker Playwright acceptance
+skwf worker-acceptance # deterministic worker-only acceptance
+skwf status       # container and health summary
+skwf stop         # stop services; preserve PostgreSQL and artifacts
+```
+
+Open `http://localhost:3000`. Local artifacts remain under `.local-data/artifacts`; `skwf stop` never deletes volumes or project data. Web/API changes hot reload. Rebuild `sendkit-workflow-worker:slim-v1` only when worker source, its runtime dependencies, or worker Dockerfile changes.
+
+Without installing the launcher, start the local stack from the SendKit repository:
+
+```bash
+./scripts/skwf dev
+```
+
+Run either acceptance profile from any terminal. Both are ephemeral and create no host `node_modules`:
+
+```bash
+./scripts/skwf acceptance
+./scripts/skwf worker-acceptance
+```
+
+### Agent authoring flow
+
+1. Start the stack with `skwf dev`.
+2. Configure the local MCP process with `SENDKIT_WORKFLOW_WEB_URL=http://127.0.0.1:3000` and an allowlist such as `SENDKIT_SOURCE_WORKSPACES={"hcns":{"root":"/absolute/path/to/hcns"}}`.
+3. Give the local agent a requirement plus the explicit SendKit project/test-case ID.
+4. Review source evidence, test plan, browser trace, decisions and the compiled draft graph.
+5. Approve the immutable workflow version in the web UI.
+6. Run or replay that version without calling the agent again.
+
+`SENDKIT_SOURCE_WORKSPACES` stays only in the laptop MCP environment. SendKit stores the workspace key and relative source paths, never the absolute local path; do not place that mapping in Vercel or browser-visible environment variables.
 
 ## Prerequisites
 
