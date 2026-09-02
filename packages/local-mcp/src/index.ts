@@ -4,6 +4,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import { telegramMessageInputSchema, sendTelegramMessage } from "@cwa-dev/sendkit-core";
 
+import { registerAuthoringTools } from "./authoring-tools";
+import { parseSourceWorkspaces } from "./source-workspaces";
+import { createWorkflowAuthoringClient } from "./workflow-client";
+
 const server = new McpServer({
   name: "sendkit-local",
   version: "0.0.0",
@@ -43,6 +47,11 @@ server.registerTool(
     };
   },
 );
+
+registerAuthoringTools(server, {
+  client: createWorkflowAuthoringClient(),
+  sourceWorkspaces: await parseSourceWorkspaces(process.env.SENDKIT_SOURCE_WORKSPACES ?? "{}"),
+});
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
