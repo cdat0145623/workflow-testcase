@@ -1,0 +1,142 @@
+name: sendkit-workflow
+
+services:
+  workflow-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: workflow
+      POSTGRES_USER: workflow
+      POSTGRES_PASSWORD: workflow
+    volumes:
+      - ../.local-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workflow -d workflow"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  workflow-worker:
+    image: sendkit-workflow-worker:slim-v1
+    build:
+      context: ..
+      dockerfile: apps/workflow-worker/Dockerfile
+    init: true
+    shm_size: "1gb"
+    environment:
+      DATABASE_URL: postgres://workflow:workflow@workflow-postgres:5432/workflow
+      ARTIFACTS_ROOT: /app/.local-data/artifacts
+      PORT: 8787
+    ports:
+      - "8787:8787"
+    volumes:
+      - ../.local-data/artifacts:/app/.local-data/artifacts
+    depends_on:
+      workflow-postgres:
+        condition: service_healthy
+
+  workflow-web:
+    image: oven/bun:1.3.7-debian
+    profiles: ["web"]
+    working_dir: /workspace
+    command: sh -c "bun install --frozen-lockfile --linker hoisted && bun run --filter @cwa-dev/sendkit-workflow-contract build && bun run --filter @cwa-dev/sendkit-workflow-web dev"
+    environment:
+      WATCHPACK_POLLING: "true"
+      WORKFLOW_DATA_MODE: local
+      WORKFLOW_WORKER_URL: http://workflow-worker:8787
+      DATABASE_URL: postgres://workflow:workflow@workflow-postgres:5432/workflow
+      ARTIFACTS_ROOT: /artifacts
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../package.json:/workspace/package.json:ro
+      - ../bun.lock:/workspace/bun.lock:ro
+      - ../apps/remote-mcp/package.json:/workspace/apps/remote-mcp/package.json:ro
+      - ../apps/workflow-worker/package.json:/workspace/apps/workflow-worker/package.json:ro
+      - ../packages/cli/package.json:/workspace/packages/cli/package.json:ro
+      - ../packages/core/package.json:/workspace/packages/core/package.json:ro
+      - ../packages/local-mcp/package.json:/workspace/packages/local-mcp/package.json:ro
+      - ../packages/local-mcp/src:/workspace/packages/local-mcp/src:ro
+      - ../packages/local-mcp/tests:/workspace/packages/local-mcp/tests:ro
+      - ../packages/local-mcp/tsconfig.json:/workspace/packages/local-mcp/tsconfig.json:ro
+      - ../packages/local-mcp/tsdown.config.ts:/workspace/packages/local-mcp/tsdown.config.ts:ro
+      - ../packages/workflow-contract/package.json:/workspace/packages/workflow-contract/package.json:ro
+      - ../packages/workflow-contract/src:/workspace/packages/workflow-contract/src:ro
+      - ../packages/workflow-contract/tests:/workspace/packages/workflow-contract/tests:ro
+      - ../packages/workflow-contract/tsconfig.build.json:/workspace/packages/workflow-contract/tsconfig.build.json:ro
+      - ../packages/workflow-contract/tsdown.config.ts:/workspace/packages/workflow-contract/tsdown.config.ts:ro
+      - ../apps/workflow-web/package.json:/workspace/apps/workflow-web/package.json:ro
+      - ../apps/workflow-web/bunfig.toml:/workspace/apps/workflow-web/bunfig.toml:ro
+      - ../apps/workflow-web/tsconfig.json:/workspace/apps/workflow-web/tsconfig.json:ro
+      - ../apps/workflow-web/next.config.ts:/workspace/apps/workflow-web/next.config.ts:ro
+      - ../apps/workflow-web/postcss.config.mjs:/workspace/apps/workflow-web/postcss.config.mjs:ro
+      - ../apps/workflow-web/app:/workspace/apps/workflow-web/app:ro
+      - ../apps/workflow-web/components:/workspace/apps/workflow-web/components:ro
+      - ../apps/workflow-web/features:/workspace/apps/workflow-web/features:ro
+      - ../apps/workflow-web/lib:/workspace/apps/workflow-web/lib:ro
+      - ../apps/workflow-web/tests:/workspace/apps/workflow-web/tests:ro
+      - workflow-web-node-modules:/workspace/node_modules
+      - workflow-web-next:/workspace/apps/workflow-web/.next
+      - workflow-contract-dist:/workspace/packages/workflow-contract/dist
+      - ../.local-data/artifacts:/artifacts:ro
+    depends_on:
+      workflow-postgres:
+        condition: service_healthy
+      workflow-worker:
+        condition: service_started
+
+  workflow-acceptance:
+    image: oven/bun:1.3.7-debian
+    profiles: ["acceptance"]
+    working_dir: /workspace
+    command: bun apps/workflow-worker/tests/acceptance/run-acceptance.ts
+    environment:
+      WORKER_URL: http://workflow-worker:8787
+      FIXTURE_HOST: 0.0.0.0
+      FIXTURE_PORT: 3001
+      ARTIFACTS_ROOT: /artifacts
+    volumes:
+      - ..:/workspace:ro
+      - ../.local-data/artifacts:/artifacts:ro
+    depends_on:
+      workflow-worker:
+        condition: service_started
+
+  workflow-authoring-acceptance:
+    image: oven/bun:1.3.7-debian
+    profiles: ["authoring-acceptance"]
+    working_dir: /workspace
+    command: sh -c "bun run --filter @cwa-dev/sendkit-workflow-contract build && bun apps/workflow-web/tests/acceptance/run-authoring-acceptance.ts"
+    environment:
+      DATABASE_URL: postgres://workflow:workflow@workflow-postgres:5432/workflow
+      WORKER_URL: http://workflow-worker:8787
+      FIXTURE_HOST: 0.0.0.0
+      FIXTURE_PORT: 3002
+      FIXTURE_PUBLIC_HOST: workflow-authoring-acceptance
+    volumes:
+      - ..:/workspace:ro
+      - workflow-web-node-modules:/workspace/node_modules
+      - workflow-contract-dist:/workspace/packages/workflow-contract/dist
+    depends_on:
+      workflow-web:
+        condition: service_started
+
+  workflow-ui-acceptance:
+    image: sendkit-workflow-worker:slim-v1
+    profiles: ["ui-acceptance"]
+    working_dir: /app
+    command: node /app/ui-tests/run-ui-acceptance.mjs
+    environment:
+      WEB_BASE_URL: http://workflow-web:3000
+      DATABASE_URL: postgres://workflow:workflow@workflow-postgres:5432/workflow
+      UI_OUTPUT_DIR: /app/output
+    volumes:
+      - ../apps/workflow-web/tests/acceptance:/app/ui-tests:ro
+      - ../output/playwright:/app/output
+    depends_on:
+      workflow-web:
+        condition: service_started
+
+volumes:
+  workflow-web-node-modules:
+  workflow-web-next:
+  workflow-contract-dist:
